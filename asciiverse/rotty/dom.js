@@ -311,12 +311,14 @@ DOM.Canvas = function () {
     this.cols = 0; this.rows = 0;
     this.ch = []; this.fg = []; this.bg = [];
     this.cursor = null;
+    this.ops = [];   // what was drawn with fillText and strokeRect, in pixels
     this._ctx = null;
     this._w = 0; this._h = 0;
 };
 DOM.Canvas.prototype = Object.create(DOM.Element.prototype);
-Object.defineProperty(DOM.Canvas.prototype, "width", { get: function () { return this._w; }, set: function (v) { this._w = v | 0; } });
-Object.defineProperty(DOM.Canvas.prototype, "height", { get: function () { return this._h; }, set: function (v) { this._h = v | 0; } });
+// setting the size clears a canvas, as in a browser
+Object.defineProperty(DOM.Canvas.prototype, "width", { get: function () { return this._w; }, set: function (v) { this._w = v | 0; this.ops = []; DOM.touch(); } });
+Object.defineProperty(DOM.Canvas.prototype, "height", { get: function () { return this._h; }, set: function (v) { this._h = v | 0; this.ops = []; DOM.touch(); } });
 DOM.Canvas.prototype.resizeCells = function (cols, rows, bg) {
     this.cols = cols; this.rows = rows;
     this._w = cols; this._h = rows;
@@ -346,12 +348,24 @@ DOM.Canvas.prototype.getContext = function () {
         textAlign: "center", textBaseline: "middle", globalAlpha: 1, lineWidth: 1,
         measureText: function (t) { return { width: String(t).length * 100 / 100 * (parseFloat(this.font) || 15) * 0.6 }; },
         fillRect: function (x, y, w, h) {
-            if (x <= 0 && y <= 0 && w >= canvas._w && h >= canvas._h) canvas.fill(this.fillStyle);
+            if (x <= 0 && y <= 0 && w >= canvas._w && h >= canvas._h) { canvas.fill(this.fillStyle); canvas.ops = []; }
+            else canvas.ops.push({ op: "fillRect", x: x, y: y, w: w, h: h, color: this.fillStyle, alpha: this.globalAlpha });
         },
         clearRect: function (x, y, w, h) {
-            if (x <= 0 && y <= 0 && w >= canvas._w && h >= canvas._h) canvas.fill(null);
+            if (x <= 0 && y <= 0 && w >= canvas._w && h >= canvas._h) { canvas.fill(null); canvas.ops = []; }
         },
-        fillText: function () {}, strokeText: function () {}, drawImage: function () {},
+        // a game that draws text on a canvas of its own: the calls are kept
+        // for its layout to place in cells
+        fillText: function (t, x, y) {
+            if (canvas.ops.length > 20000) canvas.ops.splice(0, 10000);
+            canvas.ops.push({ op: "fillText", text: String(t), x: x, y: y, color: this.fillStyle, font: this.font, alpha: this.globalAlpha });
+            DOM.touch();
+        },
+        strokeRect: function (x, y, w, h) {
+            canvas.ops.push({ op: "strokeRect", x: x, y: y, w: w, h: h, color: this.strokeStyle, alpha: this.globalAlpha });
+            DOM.touch();
+        },
+        strokeText: function () {}, drawImage: function () {},
         beginPath: function () {}, closePath: function () {}, moveTo: function () {}, lineTo: function () {},
         arc: function () {}, fill: function () {}, stroke: function () {}, rect: function () {},
         save: function () {}, restore: function () {}, translate: function () {}, scale: function () {},
